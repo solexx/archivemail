@@ -41,10 +41,10 @@ def check_python_version():
     try: 
         version = sys.version_info  # we might not even have this function! :)
         if (version[0] < 2) or (version[0] == 2 and version[1] < 3):
-            print too_old_error
+            print(too_old_error)
             sys.exit(1)
     except AttributeError:
-        print too_old_error
+        print(too_old_error)
         sys.exit(1)
 
 # define & run this early
@@ -58,14 +58,15 @@ import mailbox
 import os
 import pwd
 import re
-import rfc822
+import email.utils
+import email.message
 import shutil
 import signal
 import stat
 import string
 import tempfile
 import time
-import urlparse
+import urllib.parse
 import errno
 import socket
 import locale
@@ -133,10 +134,10 @@ class Stats:
             action = "deleted"
         if options.dry_run:
             action = "I would have " + action
-        print "%s:\n    %s %d of %d message(s) (%s of %s) in %.1f seconds" % \
+        print("%s:\n    %s %d of %d message(s) (%s of %s) in %.1f seconds" % \
             (self.__mailbox_name, action, self.__archived, self.__total,
             nice_size_str(self.__archived_size), 
-            nice_size_str(self.__total_size), time_seconds)
+            nice_size_str(self.__total_size), time_seconds))
             
 
 class StaleFiles:
@@ -163,7 +164,7 @@ class StaleFiles:
             vprint("removing stale tempfile directory '%s'" % self.temp_dir)
             try: 
                 os.rmdir(self.temp_dir)
-            except OSError, e:
+            except OSError as e:
                 if e.errno == errno.ENOTEMPTY: # Probably a bug
                     user_warning("cannot remove temporary directory '%s', "
                             "directory not empty" % self.temp_dir)
@@ -223,7 +224,7 @@ class Options:
                              "prefix=", "archive-name=", "verbose",
                              "debug-imap=", "version", "warn-duplicate",
                              "copy", "all"])
-        except getopt.error, msg:
+        except getopt.error as msg:
             user_error(msg)
 
         archive_by = None 
@@ -256,7 +257,7 @@ class Options:
             if o in ('-F', '--filter-append'):
                 self.filter_append = a
             if o in ('-h', '-?', '--help'):
-                print usage
+                print(usage)
                 sys.exit(0)
             if o in ('-n', '--dry-run'):
                 self.dry_run = True
@@ -285,7 +286,7 @@ class Options:
             if o == '--all': 
                 self.archive_all = True
             if o in ('-V', '--version'):
-                print __version__ + "\n\n" + __copyright__
+                print(__version__ + "\n\n" + __copyright__)
                 sys.exit(0)
         return args
 
@@ -348,7 +349,7 @@ class LockableMboxMixin:
                 self._posix_lock()
                 self._dotlock_lock()
                 break
-            except LockUnavailable, e:
+            except LockUnavailable as e:
                 self._posix_unlock()
                 attempt += 1
                 if (attempt > options.locking_attempts):
@@ -372,7 +373,7 @@ class LockableMboxMixin:
         vprint("trying to acquire posix lock on file '%s'" % self.mbox_file_name)
         try:
             fcntl.lockf(self.mbox_file, fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except IOError, e:
+        except IOError as e:
             if e.errno in (errno.EAGAIN, errno.EACCES):
                 raise LockUnavailable("posix lock for '%s' unavailable" % \
                     self.mbox_file_name)
@@ -396,7 +397,7 @@ class LockableMboxMixin:
         try:
             plfd, prelock_name = tempfile.mkstemp(prelock_suffix, prelock_prefix,
                 dir=box_dir)
-        except OSError, e:
+        except OSError as e:
             if e.errno == errno.EACCES:
                 if not options.quiet:
                     user_warning("no write permissions: omitting dotlock for '%s'" % \
@@ -408,7 +409,7 @@ class LockableMboxMixin:
             try:
                 os.link(prelock_name, lock_name)
                 # We've got the lock.
-            except OSError, e:
+            except OSError as e:
                 if os.fstat(plfd)[stat.ST_NLINK] == 2:
                     # The Linux man page for open(2) claims that in this
                     # case we have actually succeeded to create the link,
@@ -446,7 +447,7 @@ class LockableMboxMixin:
         self.mbox_file.close()
 
 
-class Mbox(mailbox.UnixMailbox, LockableMboxMixin):
+class Mbox(mailbox.mbox, LockableMboxMixin):
     """A mostly-read-only mbox with locking. The mbox content can only be
     modified by overwriting the entire underlying file."""
 
@@ -525,12 +526,12 @@ class TempMbox:
         self.empty = True
 
     def write(self, msg):
-        """Write a rfc822 message object to the 'mbox' mailbox.
-        If the rfc822 has no Unix 'From_' line, then one is constructed
+        """Write an EmailMessage object to the 'mbox' mailbox.
+        If the EmailMessage has no Unix 'From_' line, then one is constructed
         from other headers in the message.
 
         Arguments:
-        msg -- rfc822 message object to be written
+        msg -- EmailMessage object to be written
 
         """
         assert msg
@@ -538,15 +539,15 @@ class TempMbox:
 
         self.empty = False
         vprint("saving message to file '%s'" % self.mbox_file_name)
-        unix_from = msg.unixfrom
+        unix_from = msg.get_unixfrom()
         if unix_from:
             msg_has_mbox_format = True
         else:
             msg_has_mbox_format = False
             unix_from = make_mbox_from(msg)
         self.mbox_file.write(unix_from)
-        assert msg.headers
-        self.mbox_file.writelines(msg.headers)
+        assert msg.keys()
+        self.mbox_file.writelines(msg.keys())
         self.mbox_file.write(os.linesep)
 
         # The following while loop is about twice as fast in
@@ -631,7 +632,7 @@ class IdentityCache:
         assert msg
         message_id = msg.get('Message-ID')
         assert message_id
-        if self.seen_ids.has_key(message_id):
+        if message_id in self.seen_ids:
             user_warning("duplicate message id: '%s' in mailbox '%s'" % 
                 (message_id, self.mailbox_name))
         self.seen_ids[message_id] = True
@@ -691,7 +692,7 @@ Website: http://archivemail.sourceforge.net/ """ %   \
 
     args = options.parse_args(args, usage)
     if len(args) == 0:
-        print usage
+        print(usage)
         sys.exit(1)
 
     options.sanity_check(args)
@@ -705,7 +706,7 @@ Website: http://archivemail.sourceforge.net/ """ %   \
 def vprint(string):
     """Print the string argument if we are in verbose mode"""
     if options.verbose:
-        print string
+        print(string)
 
 
 def unexpected_error(string):
@@ -740,7 +741,7 @@ def make_mbox_from(message):
     message.
 
     Arguments:
-    message -- the rfc822 message object
+    message -- the EmailMessage object
 
     """
     assert message
@@ -771,7 +772,7 @@ def guess_return_path(message):
 
 
 def guess_delivery_time(message):
-    """Return a guess at the delivery date of an rfc822 message""" 
+    """Return a guess at the delivery date of an EmailMessage""" 
     assert message
     # try to guess the delivery date from various headers
     # get more desparate as we go through the array
@@ -780,47 +781,33 @@ def guess_delivery_time(message):
             if header == 'Received': 
                 # This should be good enough for almost all headers in the wild; 
                 # if we're guessing wrong, parsedate_tz() will fail graciously. 
-                token = message.getrawheader(header).rsplit(';', 1)[-1]
+                token = message.get(header).rsplit(';', 1)[-1] # XXX no getrawheader anymore in Python3
             else: 
                 token = message.get(header)
-            date = rfc822.parsedate_tz(token)
+            date = email.utils.parsedate_tz(token)
             if date:
-                time_message = rfc822.mktime_tz(date)
+                time_message = email.utils.mktime_tz(date)
                 vprint("using valid time found from '%s' header" % header)
                 return time_message
         except (AttributeError, IndexError, ValueError, OverflowError): pass
     # as a second-last resort, try the date from the 'From_' line (ugly)
     # this will only work from a mbox-format mailbox
-    if (message.unixfrom):
+    if (message.get_unixfrom()):
         # Hmm. This will break with full-blown RFC 2822 addr-spec's. 
-        header = message.unixfrom.split(None, 2)[-1]
+        header = message.get_unixfrom().split(None, 2)[-1]
         # Interpret no timezone as localtime
-        date = rfc822.parsedate_tz(header)
+        date = email.utils.parsedate_tz(header)
         if date:
             try:
-                time_message = rfc822.mktime_tz(date)
+                time_message = email.utils.mktime_tz(date)
                 vprint("using valid time found from unix 'From_' header")
                 return time_message
             except (ValueError, OverflowError): pass
-    # the headers have no valid dates -- last resort, try the file timestamp
-    # this will not work for mbox mailboxes
-    try:
-        file_name = get_filename(message)
-    except AttributeError:
-        # we are looking at a 'mbox' mailbox - argh! 
-        # Just return the current time - this will never get archived :(
-        vprint("no valid times found at all -- using current time!")
-        return time.time()
-    if not os.path.isfile(file_name):
-        unexpected_error("mailbox file name '%s' has gone missing" % \
-            file_name)    
-    time_message = os.path.getmtime(file_name)
-    vprint("using valid time found from '%s' last-modification time" % \
-        file_name)
-    return time_message
-   
+    vprint("no valid times found at all -- using current time!")
+    return time.time()
 
-def add_status_headers(message):
+
+def add_status_headers(message, file_name):
     """
     Add Status and X-Status headers to a message from a maildir mailbox.
 
@@ -832,7 +819,6 @@ def add_status_headers(message):
     """
     status = ""
     x_status = ""
-    file_name = get_filename(message)
     match = re.search(":2,(.+)$", file_name)
     if match:
         flags = match.group(1)
@@ -905,18 +891,13 @@ def add_status_headers_imap(message, flags):
         vprint("not generating X-Status header")
         del message['X-Status']
 
-def is_flagged(message):
+def is_flagged(message, file_name=None):
     """return true if the message is flagged important, false otherwise"""
     # MH and mbox mailboxes use the 'X-Status' header to indicate importance
     x_status = message.get('X-Status')
     if x_status and re.search('F', x_status):
         vprint("message is important (X-Status header='%s')" % x_status)
         return True
-    file_name = None
-    try:
-        file_name = get_filename(message)
-    except AttributeError:
-        pass
     # maildir mailboxes use the filename suffix to indicate flagged status
     if file_name and re.search(":2,.*F.*$", file_name):
         vprint("message is important (filename info has 'F')")
@@ -925,18 +906,13 @@ def is_flagged(message):
     return False
 
 
-def is_unread(message):
+def is_unread(message, file_name=None):
     """return true if the message is unread, false otherwise"""
     # MH and mbox mailboxes use the 'Status' header to indicate read status
     status = message.get('Status')
     if status and re.search('R', status):
         vprint("message has been read (status header='%s')" % status)
         return False
-    file_name = None
-    try:
-        file_name = get_filename(message)
-    except AttributeError:
-        pass
     # maildir mailboxes use the filename suffix to indicate read status
     if file_name and re.search(":2,.*S.*$", file_name):
         vprint("message has been read (filename info has 'S')")
@@ -945,32 +921,10 @@ def is_unread(message):
     return True
 
 
-def sizeof_message(message):
+def sizeof_message(message, file_name=None):
     """Return size of message in bytes (octets)."""
     assert message
-    file_name = None
-    message_size = None
-    try:
-        file_name = get_filename(message)
-    except AttributeError:
-        pass
-    if file_name:
-        # with maildir and MH mailboxes, we can just use the file size
-        message_size = os.path.getsize(file_name)
-    else:
-        # with mbox mailboxes, not so easy
-        message_size = 0
-        if message.unixfrom:
-            message_size = message_size + len(message.unixfrom)
-        for header in message.headers:
-            message_size = message_size + len(header)
-        message_size = message_size + 1 # the blank line after the headers
-        start_offset = message.fp.tell()
-        message.fp.seek(0, 2) # seek to the end of the message
-        end_offset = message.fp.tell()
-        message.rewindbody()
-        message_size = message_size + (end_offset - start_offset)
-    return message_size
+    return len(message.as_bytes())
 
 def is_smaller(message, size):
     """Return true if the message is smaller than size bytes, false otherwise"""
@@ -987,7 +941,7 @@ def is_smaller(message, size):
         return False
 
 
-def should_archive(message):
+def should_archive(message, file_name=None):
     """Return true if we should archive the message, false otherwise"""
     if options.archive_all:
         return True
@@ -1002,11 +956,11 @@ def should_archive(message):
     # understand it. 
     if not old:
         return False
-    if not options.include_flagged and is_flagged(message):
+    if not options.include_flagged and is_flagged(message, file_name):
         return False
     if options.min_size and is_smaller(message, options.min_size):
         return False
-    if options.preserve_unread and is_unread(message):
+    if options.preserve_unread and is_unread(message, file_name):
         return False
     return True
         
@@ -1091,16 +1045,16 @@ def archive(mailbox_name):
     assert mailbox_name
 
     set_signal_handlers()
-    os.umask(077) # saves setting permissions on mailboxes/tempfiles
+    os.umask(0o77) # saves setting permissions on mailboxes/tempfiles
 
     vprint("processing '%s'" % mailbox_name)
-    is_imap = urlparse.urlparse(mailbox_name)[0] in ('imap', 'imaps')
+    is_imap = urllib.parse.urlparse(mailbox_name)[0] in ('imap', 'imaps')
     if not is_imap:
         # Check if the mailbox exists, and refuse to mess with other people's
         # stuff
         try:
             fuid = os.stat(mailbox_name).st_uid
-        except OSError, e:
+        except OSError as e:
             user_error(str(e))
         else:
             if fuid != os.getuid():
@@ -1158,7 +1112,7 @@ def _archive_mbox(mailbox_name):
     archive = prepare_temp_archive()
 
     original.lock()
-    msg = original.next()
+    msg = next(original)
     if not msg and (original.starting_size > 0):
         user_error("'%s' is not a valid mbox-format mailbox" % mailbox_name)
     if msg and 'X-IMAP' in msg:
@@ -1166,7 +1120,7 @@ def _archive_mbox(mailbox_name):
         vprint("detected IMAP pseudo message")
         if retain:
             retain.write(msg)
-        msg = original.next()
+        msg = next(original)
     while (msg):
         msg_size = sizeof_message(msg)
         stats.another_message(msg_size)
@@ -1185,7 +1139,7 @@ def _archive_mbox(mailbox_name):
             vprint("decision: retain message")
             if retain:
                 retain.write(msg)
-        msg = original.next()
+        msg = next(original)
     vprint("finished reading messages") 
     if original.starting_size != original.get_size():
         unexpected_error("the mailbox '%s' changed size during reading!" % \
@@ -1212,8 +1166,8 @@ def _archive_mbox(mailbox_name):
                 original.commit()
             except:
                 retain.saveas(saved_name)
-                print "Error writing back changed mailbox; saved good copy to " \
-                        "%s" % saved_name
+                print("Error writing back changed mailbox; saved good copy to " \
+                        "%s" % saved_name)
                 raise
         else:
             retain.close()
@@ -1245,16 +1199,18 @@ def _archive_dir(mailbox_name, type):
     cache = IdentityCache(mailbox_name)
     archive = prepare_temp_archive()
 
-    for msg in original:
+    for key, msg in original.iteritems():
+        # XXX HACKHACKHACK
+        file_name = original.__toc__[key]
         if not msg: 
-            vprint("ignoring invalid message '%s'" % get_filename(msg))
+            vprint("ignoring invalid message '%s'" % file_name)
             continue
         msg_size = sizeof_message(msg)
         stats.another_message(msg_size)
         vprint("processing message '%s'" % msg.get('Message-ID'))
         if options.warn_duplicates:
             cache.warn_if_dupe(msg)             
-        if should_archive(msg):
+        if should_archive(msg, file_name):
             stats.another_archived(msg_size)
             if options.delete_old_mail:
                 vprint("decision: delete message")
@@ -1262,10 +1218,10 @@ def _archive_dir(mailbox_name, type):
                 vprint("decision: archive message")
                 if archive:
                     if type == "maildir":
-                        add_status_headers(msg)
+                        add_status_headers(msg, file_name)
                     archive.write(msg)
             if not options.dry_run and not options.copy_old_mail:
-                delete_queue.append(get_filename(msg)) 
+                delete_queue.append(file_name) 
         else:
             vprint("decision: retain message")
     vprint("finished reading messages") 
@@ -1275,7 +1231,7 @@ def _archive_dir(mailbox_name, type):
     for file_name in delete_queue:
         vprint("removing original message: '%s'" % file_name)
         try: os.remove(file_name)
-        except OSError, e:
+        except OSError as e:
             if e.errno != errno.ENOENT: raise
     if not options.quiet:
         stats.display()
@@ -1284,7 +1240,7 @@ def _archive_imap(mailbox_name):
     """Archive an imap mailbox - used by archive_mailbox()"""
     assert mailbox_name
     import imaplib
-    import cStringIO
+    import io
     import getpass
 
     # TAXWEB: CORRECAO
@@ -1393,7 +1349,7 @@ def _archive_imap(mailbox_name):
                     if result != 'OK': unexpected_error("Failed to fetch message; "
                         "server says '%s'" % response[0])
                     msg_str = response[0][1].replace("\r\n", os.linesep)
-                    msg = rfc822.Message(cStringIO.StringIO(msg_str))
+                    msg = email.message.EmailMessage(io.StringIO(msg_str))
                     vprint("processing message '%s'" % msg.get('Message-ID'))
                     add_status_headers_imap(msg, msg_flags)
                     if options.warn_duplicates:
@@ -1452,14 +1408,14 @@ def mod_utf7_encode(ustr):
         return mb64
 
     mu7 = ""
-    tomb64 = u""
+    tomb64 = ""
     for c in ustr:
         if not isprint_ascii(c):
             tomb64 += c
             continue
         if tomb64:
             mu7 += '&' + mb64_encode(tomb64) + '-'
-            tomb64 = u""
+            tomb64 = ""
         if c == '&':
             mu7 += '&-'
         else:
@@ -1476,7 +1432,7 @@ def mod_utf7_decode(mu7):
         unicode string object."""
         if not mb64:
             # A null shift '&-' decodes to '&'.
-            return u"&"
+            return "&"
         u16be = ""
         # Process blocks of 4 BASE64 characters, decoding each char to 6 bits.
         for block in [mb64[i:i+4] for i in range(0, len(mb64), 4)]:
@@ -1492,7 +1448,7 @@ def mod_utf7_decode(mu7):
                              "trailing bits in shifted sequence")
         return u16be.decode('utf_16_be')
 
-    ustr = u""
+    ustr = ""
     mb64 = ""
     inmb64 = False
     for octet in mu7:
@@ -1628,7 +1584,7 @@ def imap_get_namespace(srv):
         m = re.match(r'\(\("([^"]*)" (?:"(.)"|NIL)', response[0])
         nsprefix, hdelim = m.groups()
     except:
-        print "Cannot parse IMAP NAMESPACE response %s" % repr(response)
+        print("Cannot parse IMAP NAMESPACE response %s" % repr(response))
         raise
     return nsprefix, hdelim
 
@@ -1879,7 +1835,7 @@ def nice_size_str(size):
 
 
 def get_filename(msg): 
-    """If the given rfc822.Message can be identified with a file (no mbox),
+    """If the given EmailMessage can be identified with a file (no mbox),
     return the filename, otherwise raise AttributeError."""
     try:
         return msg.fp.name
@@ -1911,7 +1867,7 @@ def safe_open_create(filename):
     try:
         try:
             os.link(pre_name, filename)
-        except OSError, e:
+        except OSError as e:
             if os.fstat(fd).st_nlink == 2:
                 pass
             else:
@@ -1944,7 +1900,7 @@ def safe_open(filename):
     vprint("Opening archive...")
     try:
         fd = safe_open_existing(filename)
-    except OSError, e:
+    except OSError as e:
         if e.errno != errno.ENOENT: raise
         fd = safe_open_create(filename)
     return fd

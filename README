@@ -1,5 +1,17 @@
 
 -----------------------------------------------------------
+DANGER
+-----------------------------------------------------------
+
+This fork is a work in progress for the conversion to
+Python3. It **will** eat your e-mails. Do not run on
+your real e-mails.
+
+I do not mean "use at your own risk". I am saying "do not
+use for any purpose other than helping converting the
+source to Python3.
+
+-----------------------------------------------------------
 archivemail - archive and compress old mail in your mailbox
 -----------------------------------------------------------
 
@@ -52,12 +64,8 @@ cron.
 
 The archivemail website is at: http://archivemail.sourceforge.net/
 
-If you have any feedback or bug reports about archivemail, you are very
-welcome to email the maintainers; as of November 2006, these are:
+archivemail was initially developed by Paul Rodger and later on maintained by
+Nikolaus Schulz and Peter Poeml. All bugs in this version were added by Jochen
+Spieker and previous authors should not be bothered because of problems that
+you find in this version.
 
-Nikolaus Schulz <microschulz@web.de>
-Peter Poeml <poeml@suse.de>
-
-
--- Paul Rodger <paul at paulrodger dot com>, archivemail author
-   Updated by: Nikolaus Schulz, maintainer

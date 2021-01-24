@@ -540,35 +540,46 @@ class TempMbox:
         self.empty = False
         vprint("saving message to file '%s'" % self.mbox_file_name)
         unix_from = msg.get_unixfrom()
-        if unix_from:
-            msg_has_mbox_format = True
-        else:
-            msg_has_mbox_format = False
+        vprint("unix_from: %s" % unix_from)
+        msg_has_mbox_format = bool(unix_from)
+        if not unix_from:
             unix_from = make_mbox_from(msg)
         # XXX why utf-8 here?
         self.mbox_file.write(unix_from.encode("utf-8"))
         assert msg.keys()
         for line in msg.keys():
             self.mbox_file.write(line.encode("utf-8"))
+            self.mbox_file.write(os.linesep.encode("utf-8"))
         self.mbox_file.write(os.linesep.encode("utf-8"))
 
-        # The following while loop is about twice as fast in
-        # practice to 'self.mbox_file.writelines(msg.fp.readlines())'
-        assert options.read_buffer_size > 0
-        linebuf = ""
-        while True:
-            body = msg.fp.read(options.read_buffer_size)
-            if (not msg_has_mbox_format) and options.mangle_from:
-                # Be careful not to break pattern matching
-                splitindex = body.rfind(os.linesep)
-                nicebody = linebuf + body[:splitindex]
-                linebuf = body[splitindex:]
-                body = from_re.sub('>From ', nicebody)
-            if not body:
-                break
-            self.mbox_file.write(body)
+#        # The following while loop is about twice as fast in
+#        # practice to 'self.mbox_file.writelines(msg.fp.readlines())'
+#        assert options.read_buffer_size > 0
+#        linebuf = ""
+#        while True:
+#            body = msg.fp.read(options.read_buffer_size)
+#            if (not msg_has_mbox_format) and options.mangle_from:
+#                # Be careful not to break pattern matching
+#                splitindex = body.rfind(os.linesep)
+#                nicebody = linebuf + body[:splitindex]
+#                linebuf = body[splitindex:]
+#                body = from_re.sub('>From ', nicebody)
+#            if not body:
+#                break
+#            self.mbox_file.write(body)
+        msg_str = msg.as_string()
+        body = ""
+        body_started = False
+        for line in msg_str.splitlines(keepends=True):
+            body_started = body_started or line == os.linesep
+            if body_started:
+                body = body + line
+
+        vprint("body type: %s" % type(body))
+        self.mbox_file.writelines(
+                bytes(line, 'utf-8') for line in body)
         if not msg_has_mbox_format:
-            self.mbox_file.write(os.linesep)
+            self.mbox_file.write(os.linesep.encode('utf-8'))
 
     def commit(self):
         """Sync the mbox file to disk."""
@@ -763,9 +774,13 @@ def guess_return_path(message):
     for header in ('Return-path', 'From'):
         address_header = message.get(header)
         if address_header:
+            vprint("guess_return_path: found header %s: %s" % (header, address_header))
             (name, address) = email.utils.parseaddr(address_header)
+            vprint("guess_return_path: name: %s, address: %s" % (name, address))
             if address:
                 return address
+        else:
+            vprint("guess_return_path: did not find header: %s" % header)
     # argh, we can't find any valid 'Return-path' guesses - just 
     # just use the current unix username like mutt does
     login = pwd.getpwuid(os.getuid())[0]

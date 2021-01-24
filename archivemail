@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 ############################################################################
 # Copyright (C) 2002  Paul Rodger <paul@paulrodger.com>,
 #           (C) 2006  Peter Poeml <poeml@suse.de>,
@@ -483,7 +483,7 @@ class Mbox(mailbox.mbox, LockableMboxMixin):
 
     def overwrite_with(self, mbox_filename):
         """Overwrite the mbox content with the content of the given mbox file."""
-        fin = open(mbox_filename, "r")
+        fin = open(mbox_filename, "rb")
         self.mbox_file.seek(0)
         shutil.copyfileobj(fin, self.mbox_file)
         self.mbox_file.truncate()
@@ -494,13 +494,13 @@ class ArchiveMbox(LockableMboxMixin):
 
     def __init__(self, path):
         fd = safe_open(path)
-        self.mbox_file = os.fdopen(fd, "a")
+        self.mbox_file = os.fdopen(fd, "ab")
         LockableMboxMixin.__init__(self, self.mbox_file, path)
 
     def append(self, filename):
         """Append the content of the given file to the mbox."""
         assert self._locked
-        fin = open(filename, "r")
+        fin = open(filename, "rb")
         oldsize = os.fstat(self.mbox_file.fileno()).st_size
         try:
             shutil.copyfileobj(fin, self.mbox_file)
@@ -520,7 +520,7 @@ class TempMbox:
         fd, filename = tempfile.mkstemp(prefix=prefix)
         self.mbox_file_name = filename
         _stale.temp_mboxes.append(filename)
-        self.mbox_file = os.fdopen(fd, "w")
+        self.mbox_file = os.fdopen(fd, "wb")
         # an empty gzip file is not really empty (it contains the gzip header
         # and trailer), so we need to track manually if this mbox is empty
         self.empty = True
@@ -545,10 +545,12 @@ class TempMbox:
         else:
             msg_has_mbox_format = False
             unix_from = make_mbox_from(msg)
-        self.mbox_file.write(unix_from)
+        # XXX why utf-8 here?
+        self.mbox_file.write(unix_from.encode("utf-8"))
         assert msg.keys()
-        self.mbox_file.writelines(msg.keys())
-        self.mbox_file.write(os.linesep)
+        for line in msg.keys():
+            self.mbox_file.write(line.encode("utf-8"))
+        self.mbox_file.write(os.linesep.encode("utf-8"))
 
         # The following while loop is about twice as fast in
         # practice to 'self.mbox_file.writelines(msg.fp.readlines())'
@@ -755,13 +757,13 @@ def make_mbox_from(message):
 
 
 def guess_return_path(message):
-    """Return a guess at the Return Path address of an rfc822 message"""
+    """Return a guess at the Return Path address of an EmailMessage"""
     assert message
 
     for header in ('Return-path', 'From'):
         address_header = message.get(header)
         if address_header:
-            (name, address) = rfc822.parseaddr(address_header)
+            (name, address) = email.utils.parseaddr(address_header)
             if address:
                 return address
     # argh, we can't find any valid 'Return-path' guesses - just 
@@ -1199,9 +1201,7 @@ def _archive_dir(mailbox_name, type):
     cache = IdentityCache(mailbox_name)
     archive = prepare_temp_archive()
 
-    for key, msg in original.iteritems():
-        # XXX HACKHACKHACK
-        file_name = original.__toc__[key]
+    for file_name, msg in original.iteritems():
         if not msg: 
             vprint("ignoring invalid message '%s'" % file_name)
             continue
